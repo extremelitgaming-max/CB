@@ -1,28 +1,25 @@
-# Carolina Bandits Stripe live payment readiness
+# Carolina Bandits — Live payment launch checklist
 
-Status: **NOT APPROVED FOR LIVE CHARGES**. Keep `LIVE_PAYMENTS_ENABLED` unset/false. Do not add a live secret until all gates pass.
+**Status: PREPARATION ONLY — LIVE CHARGES DISABLED**
 
-## Current working test
-- Existing $1 Stripe test transaction is paid and the player dues balance is zero.
-- Preserve this payment and its linked dues record for audit/debugging; do not force-delete or edit it.
-- Preview Vercel Authentication is enabled. The webhook received 401/403 until Preview protection was temporarily disabled. Do not leave Preview publicly accessible.
+## Verified on October 13, 2026
+- Existing Supabase project remains in use. No new paid Supabase project was created.
+- Added `public.bandits_live_dues` and `public.bandits_live_payments` using a non-destructive database migration. Both have RLS enabled, and direct table privileges for `anon` and `authenticated` are revoked.
+- Added service-role-only `bandits_record_live_stripe_payment` RPC with a row lock and an outstanding-balance guard.
+- New live tables contain zero rows; existing test ledger still contains one paid test transaction ($1).
+- Development checkout and webhook use mode-specific tables and recording functions. The existing test-mode tables and RPC remain unchanged.
+- Live mode requires `STRIPE_MODE=live`, `LIVE_PAYMENTS_ENABLED=true`, `LIVE_STRIPE_KEY`, a matching live webhook secret, and Vercel Production. None of these were activated by this work.
+- Production deployment and environment variables were not changed.
 
-## Before enabling live
-1. Confirm production domain, Supabase Auth redirects, and access-control policies. Review hardcoded owner authorization and parent-to-player linkage.
-2. Isolate live and test payment ledgers (prefer separate Supabase projects/databases or add a mode column with constraints and update checkout, webhook, reports, and RPC to enforce it). Current schema is **not isolated**; do not activate live payments with the current shared ledger.
-3. Implement robust idempotency and race controls for concurrent checkouts; verify duplicate webhook deliveries cannot double-credit dues, and handle delayed/async payment methods or disable them.
-4. Create a distinct Stripe **live** webhook destination pointing to the public production `/api/stripe-webhook`. Subscribe to the necessary events and set its signing secret as a Production-only Vercel secret.
-5. Set `STRIPE_MODE=live`, `LIVE_SUPABASE_URL` (different from test `SUPABASE_URL`), `LIVE_SUPABASE_SERVICE_ROLE_KEY`, `LIVE_STRIPE_KEY=sk_live_...`, `STRIPE_WEBHOOK_SECRET=whsec_...`, `PAYMENTS_SITE_URL` to the exact verified production HTTPS origin, `SUPABASE_SERVICE_ROLE_KEY` to a server-only key, and `LIVE_PAYMENTS_ENABLED=true` **only after final approval**. Never expose secret keys to the browser, repository, or chat.
-6. Validate server-side checkout amounts, guardian authorization, refunds/disputes, receipt emails, finance reports, and security logs. Stripe signature checks must use the exact raw request body.
-7. Confirm deployment and a low-risk live transaction with explicit authorization, and document how to disable checkout immediately.
+## Blockers before any live payment
+1. **Admin and parent UI** still reference existing test dues and payments tables; update UI and reports to display only the intended mode. Never mix test and live financial totals.
+2. Review live-table RLS and service-role privileges and ensure there are no client-accessible RPCs that bypass authorization.
+3. Review existing hardcoded owner authorization and guardian links; verify only authorized users can create checkout sessions and that amounts cannot be tampered with.
+4. Add robust concurrent-checkout reservation/locking so two valid sessions cannot overpay a due. The live RPC currently returns false on an exceeded balance; a real charge could still succeed at Stripe before reconciliation fails. This is a **launch blocker**.
+5. Implement refunds/disputes and payment-method policy; test duplicate, late, invalid, and retried webhooks.
+6. Confirm Stripe live account and create a distinct live webhook signing secret. Keep keys only in server-side Production secrets.
+7. Perform a staged integration test with the correct authentication, admin reporting, and a clearly documented emergency disable switch.
+8. Require explicit launch approval before setting `LIVE_PAYMENTS_ENABLED=true` or publishing live payment functionality.
 
-## Code notes
-- `lib/payments.js` supports explicit live mode only in Vercel Production and only when `LIVE_PAYMENTS_ENABLED=true`. Missing `STRIPE_MODE` defaults to test to preserve existing Preview behavior.
-- `api/stripe-webhook.js` rejects a Stripe event whose `livemode` differs from the configured mode.
-- The current production deployment has not been modified by this branch-only preparation.
-
-## Separation implementation (development only)
-- Test mode continues to use `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` and the existing $1 paid test entry remains untouched.
-- Live mode uses only `LIVE_SUPABASE_URL` and `LIVE_SUPABASE_SERVICE_ROLE_KEY`; readiness fails if its URL matches the test URL, if required live settings are absent, or if the deployment is not Vercel Production.
-- The current frontend/auth integration is still connected to the existing Supabase project; a new live project and coordinated auth/roster migration are prerequisites. This is **not** a completed live integration.
-- Webhook processing now treats a false database reconciliation result as an error instead of acknowledging it with HTTP 200.
+## Cost and isolation
+Same Supabase project, separate payment tables: no additional project subscription, but normal usage charges may still apply. This is **logical** separation, not full database isolation.
