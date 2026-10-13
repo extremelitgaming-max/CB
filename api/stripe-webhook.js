@@ -1,4 +1,4 @@
-import {createHmac,timingSafeEqual} from 'node:crypto';import {ready,rest} from './_payments.js';
+import {createHmac,timingSafeEqual} from 'node:crypto';import {ready,rest} from '../lib/payments.js';
 export const config={api:{bodyParser:false}};
 async function raw(req){const chunks=[];for await(const c of req)chunks.push(c);return Buffer.concat(chunks)}
 function valid(payload,header){const secret=process.env.STRIPE_WEBHOOK_SECRET;if(!secret||!header)return false;const parts=Object.fromEntries(header.split(',').map(s=>s.split('=')));const ts=Number(parts.t);if(!Number.isFinite(ts)||Math.abs(Date.now()/1000-ts)>300)return false;const sigs=header.split(',').filter(x=>x.startsWith('v1=')).map(x=>x.slice(3));const expected=createHmac('sha256',secret).update(String(ts)+'.'+payload).digest('hex');return sigs.some(s=>s.length===expected.length&&timingSafeEqual(Buffer.from(s),Buffer.from(expected)))}
