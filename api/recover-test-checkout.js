@@ -1,7 +1,7 @@
 import {ready,rest,getUser,OWNER,paymentsTable,paymentMode} from '../lib/payments.js';
 export default async function handler(req,res){
  if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
- if(!ready()||paymentMode()!=='test'||process.env.VERCEL_ENV==='production')return res.status(503).json({error:'Test recovery unavailable'});
+ if(!ready()||paymentMode()!=='test'||process.env.VERCEL_ENV==='production'||process.env.TEST_CHECKOUT_RECOVERY_ENABLED!=='true')return res.status(503).json({error:'Test recovery unavailable'});
  try{
   const token=(req.headers.authorization||'').replace(/^Bearer\s+/i,'');
   const user=await getUser(token);
@@ -29,7 +29,7 @@ export default async function handler(req,res){
    if(!response.ok)throw Error('Stripe expiration verification failed');
    session=await response.json();
   }
-  if(session.id!==sessionId||session.status!=='expired'||session.payment_status==='paid')return res.status(409).json({error:'Stripe expiration not confirmed. Checkout remains blocked'});
+  if(session.id!==sessionId||session.livemode!==false||session.mode!=='payment'||session.status!=='expired'||session.payment_status!=='unpaid')return res.status(409).json({error:'Stripe expiration not confirmed. Checkout remains blocked'});
   const released=await rest('rpc/bandits_release_expired_checkout',{method:'POST',body:JSON.stringify({p_payment_id:id,p_session_id:sessionId})});
   if(released!==true)return res.status(409).json({error:'Payment changed during recovery; check payment status'});
   return res.status(200).json({recovered:true,message:'Stripe checkout expired and pending lock released'});
