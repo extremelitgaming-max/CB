@@ -1,1 +1,25 @@
-import{createClient}from '@supabase/supabase-js';const db=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);const p=document.createElement('section');p.hidden=true;p.innerHTML='<h3>Access requests</h3><button id="refresh-requests">Refresh</button><div id="requests"></div>';document.getElementById('dashboard').append(p);async function load(){const{data:{user}}=await db.auth.getUser();if(user?.id!=='2b42fc1e-9c19-41d6-91a7-a34671d7ff80')return;p.hidden=false;const{data,error}=await db.from('bandits_access_requests').select('user_id,full_name,email,requested_division').eq('status','pending');const root=document.getElementById('requests');root.replaceChildren();if(error){root.textContent=error.message;return}if(!data.length)root.textContent='No pending requests';for(const r of data){const box=document.createElement('p');box.textContent=r.full_name+' ('+r.email+') Â· '+r.requested_division+' ';const role=document.createElement('select');for(const value of ['parent','coach']){const o=document.createElement('option');o.value=value;o.textContent=value;role.append(o)}box.append(role);for(const action of ['approve','deny']){const b=document.createElement('button');b.textContent=action;b.onclick=async()=>{if(!confirm(action+' this request?'))return;const{error}=await db.rpc('bandits_review_access_request',{p_user_id:r.user_id,p_action:action,p_role:role.value});if(error)alert(error.message);else load()};box.append(b)}root.append(box)}}document.getElementById('refresh-requests').onclic¶»§q«^
+import {createClient} from '@supabase/supabase-js';
+const db=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+const section=document.createElement('section');
+section.hidden=true;
+section.innerHTML='<h3>Pending division requests</h3><button type="button" id="refresh-requests">Refresh</button><div id="requests" aria-live="polite"></div>';
+document.getElementById('dashboard').append(section);
+async function load(){
+ const {data:{user}}=await db.auth.getUser();
+ if(user?.id!=='2b42fc1e-9c19-41d6-91a7-a34671d7ff80'){section.hidden=true;return;}
+ section.hidden=false;
+ const root=document.getElementById('requests');
+ root.textContent='Loading requestsâ€¦';
+ const {data,error}=await db.from('bandits_division_requests').select('user_id,division,status,created_at').eq('status','pending').order('created_at');
+ root.replaceChildren();
+ if(error){root.textContent='Could not load requests: '+error.message;return;}
+ if(!data?.length){root.textContent='No pending requests';return;}
+ for(const request of data){
+  const line=document.createElement('p');
+  line.textContent=request.user_id+' â€” '+request.division+' â€” pending';
+  root.append(line);
+ }
+}
+document.getElementById('refresh-requests').addEventListener('click',load);
+db.auth.onAuthStateChange(()=>setTimeout(load,100));
+setTimeout(load,500);
