@@ -18,7 +18,13 @@ async function load(){
   const line=document.createElement('p');
   line.textContent=request.user_id+' — '+request.division+' — pending';
   for(const action of ['approve','deny']){
-   const button=document.createElement('button');button.type='button';button.textContent=action==='approve'?'Approve':'Deny';button.disabled=true;button.title='Action will be enabled after approval integration is validated';line.append(button);
+   const button=document.createElement('button');button.type='button';button.textContent=action==='approve'?'Approve':'Deny';button.addEventListener('click',async()=>{
+    if(!confirm(action+' '+request.division+' access request?'))return;
+    button.disabled=true;
+    const {error}=await db.rpc('bandits_review_division_request',{p_user_id:request.user_id,p_division:request.division,p_action:action,p_role:'parent'});
+    if(error){alert(error.message);button.disabled=false;return;}
+    await load();
+   });line.append(button);
   }
   root.append(line);
  }
