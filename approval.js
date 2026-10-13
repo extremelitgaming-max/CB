@@ -17,6 +17,9 @@ async function load(){
  for(const request of data){
   const line=document.createElement('p');
   line.textContent=request.user_id+' — '+request.division+' — pending';
+  for(const action of ['approve','deny']){
+   const button=document.createElement('button');button.type='button';button.textContent=action==='approve'?'Approve':'Deny';button.disabled=true;button.title='Action will be enabled after approval integration is validated';line.append(button);
+  }
   root.append(line);
  }
 }
